@@ -1,64 +1,58 @@
-import  streamlit as st
-import google.generativeai as genai
+import streamlit as st
+import os
 
-genai.configure(api_key="AIzaSyB2esPAWxN-E-PxWUogL9ID-AnJYLTA8H0")
-model = genai.GenerativeModel('gemini-2.5-flash')
+# Try multiple import styles to be compatible with different google-genai versions
+GenAIClient = None
+try:
+    from google_genai import Client as GenAIClient
+except Exception:
+    try:
+        from google import genai
+        GenAIClient = genai.Client
+    except Exception:
+        GenAIClient = None
 
+st.title("Google GenAI — Streamlit demo")
 
+st.markdown(
+    "Enter a text prompt below and click Generate. "
+    "Make sure GOOGLE_API_KEY or GOOGLE_APPLICATION_CREDENTIALS is set in the environment, or paste an API key in the field below."
+)
 
-st.title(" FTI AI by Vaidik Bhoi")
-st.markdown("** proud to india that have its first ai for daily life help**")
+api_key = st.text_input("Google API key (optional — prefer env var)", type="password")
 
-# Chat interface
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+model = st.selectbox("Model", ["models/text-bison-001"], index=0)
+prompt = st.text_area("Prompt", height=200)
 
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+def get_client(api_key_input):
+    if GenAIClient is None:
+        return None
+    # Some client constructors accept api_key kwarg, others rely on ADC. Try both.
+    if api_key_input:
+        try:
+            return GenAIClient(api_key=api_key_input)
+        except TypeError:
+            # Fallback to no-arg constructor and rely on environment
+            return GenAIClient()
+    return GenAIClient()
 
-if prompt := st.chat_input("Ask FTI AI..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
-    with st.chat_message("assistant"):
-        with st.spinner("FTI soch raha hai..."):
-            response = model.generate_content(prompt).text
-            st.markdown(response)
-        st.session_state.messages.append({"role": "assistant", "content": response})
-        # TERA KEY
-
-# TERA BRAND
-CREATOR = "Vaidik Bhoi"
-
-print("FTI AI LIVE HAI!\n")
-
-while True:
-        user = input(">>> ")
-        if user.strip() == "":
-            continue
-        if user.lower() in ['bye', 'exit', 'quit', 'band']:
-            print("Bye bhai! Vaidik Bhoi ka AI band! 🇮🇳\n")
-            break
-
-        # FINAL PROMPT — POLITE + BHAI STYLE
-        prompt = f"""
-        Tu FTI AI hai.
-        Malik: {CREATOR}
-        
-        RULES:
-        - Jawab **user ki language mein de**
-        - Hamesha **polite**, **bhai wala pyar**, **respectful**
-        - Koi bhi batamizi, slang, "yo", "bro" mat bolna
-        - Short, helpful, natural
-        - Malik → "{CREATOR}"
-        - Tu kaun → "Main FTI AI hoon, {CREATOR} ne banaya hai."  
-
-         User ne poocha ({lang}): {user}
-        """
-
-        reply = model.generate_content(prompt).text.strip()
-        print(reply + "\n")
-
-    
+if st.button("Generate") and prompt.strip():
+    client = get_client(api_key)
+    if client is None:
+        st.error("google-genai client not available. Install the package 'google-genai' in your environment.")
+        st.stop()
+    with st.spinner("Generating..."): 
+        try:
+            # Try common generate_text signature; adapt if your client library differs
+            resp = client.generate_text(model=model, prompt=prompt)
+            # Try some common response shapes
+            text = getattr(resp, "text", None)
+            if not text:
+                try:
+                    text = resp.output[0].content[0].text
+                except Exception:
+                    text = str(resp)
+            st.subheader("Response")
+            st.write(text)
+        except Exception as e:
+            st.error(f"Request failed: {e}")
